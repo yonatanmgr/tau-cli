@@ -396,7 +396,7 @@ def interactive_mode(moodle):
 
 
 def main():
-    """Main entry point for the application."""
+    """Main entry point for the application"""
     global LOGIN_DETAILS
     LOGIN_DETAILS = get_login_details()
 
