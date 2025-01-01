@@ -1,6 +1,6 @@
 [project]
 name = "tau-cli"
-version = "0.1.6"
+version = "0.1.9"
 description = "Query Tel Aviv University's IMS and Moodle"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -11,7 +11,7 @@ dependencies = [
     "tau-tools>=1.1.8",
 ]
 authors = [
-    {name = "Yonatan Magier", email = "31913495+yonatanmgr@users.noreply.github.com"}
+    { name = "Yonatan Magier", email = "31913495+yonatanmgr@users.noreply.github.com" },
 ]
 
 [build-system]

@@ -13,18 +13,16 @@ from threading import Thread
 import webbrowser
 import re
 
-# Constants
 DEFAULT_CACHE_DIR = Path.home() / "tau"
 LOGIN_DETAILS = ("", "", "")
-CACHE_TTL = timedelta(days=0)
+CACHE_TTL = timedelta(hours=1)
+RECORDINGS_CACHE_DIR = DEFAULT_CACHE_DIR / "recordings"
 CACHE_FILES = {
     "courses": DEFAULT_CACHE_DIR / "courses_cache.pkl",
     "assignments": DEFAULT_CACHE_DIR / "assignments_cache.pkl",
     "grades": DEFAULT_CACHE_DIR / "grades_cache.pkl",
-    "recordings": DEFAULT_CACHE_DIR / "recordings_cache.pkl",
     "login_details": DEFAULT_CACHE_DIR / "login_details.pkl",
 }
-
 
 def reverse_hebrew_substrings(text):
     """
@@ -191,18 +189,55 @@ def load_courses(moodle) -> list[CourseInfo]:
     return moodle.get_courses()
 
 
+def get_recordings_cache_path(course_id):
+    """Returns the path for course-specific recordings cache.
+
+    Args:
+        course_id (int): Course ID
+
+    Returns:
+        Path: Path to the recordings cache file
+    """
+    return RECORDINGS_CACHE_DIR / f"recordings_{course_id}.pkl"
+
 @loading_animation(running_text="Loading recordings", finished_text="Recordings loaded!")
 def load_recordings(moodle, course_id) -> list[RecordingInfo]:
     """Loads recordings for a specific course from Moodle.
 
     Args:
-        moodle (Moodle): Moodle API instance.
-        course_id (int): Course ID.
+        moodle (Moodle): Moodle API instance
+        course_id (int): Course ID
 
     Returns:
-        list: List of recordings.
+        list: List of recordings
     """
-    return moodle.get_recordings(course_id=course_id)
+    # Get fresh recordings from Moodle
+    new_recordings = moodle.get_recordings(course_id=course_id)
+
+    # Get cache path for this course
+    cache_path = get_recordings_cache_path(course_id)
+
+    # Load existing cache if it exists
+    cached_recordings = None
+    if cache_path.exists():
+        with open(cache_path, "rb") as f:
+            try:
+                cache = pickle.load(f)
+                cached_recordings = cache["data"]
+            except (pickle.UnpicklingError, EOFError):
+                print(f"Cache file {cache_path} is corrupted. Reinitializing.")
+
+    # Compare number of recordings
+    if cached_recordings and len(cached_recordings) >= len(new_recordings):
+        return cached_recordings
+
+    # Save new recordings to cache
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(cache_path, "wb") as f:
+        pickle.dump({"data": new_recordings, "last_updated": datetime.now()}, f)
+
+    return new_recordings
+
 
 
 @loading_animation(running_text="Loading grades", finished_text="Grades loaded!")
@@ -248,7 +283,7 @@ def interactive_mode(moodle):
     """Starts the interactive mode for user interaction.
 
     Args:
-        moodle (Moodle): Moodle API instance.
+        moodle (Moodle): Moodle API instance
     """
     while True:
         print("")
@@ -341,9 +376,10 @@ def interactive_mode(moodle):
 
                 assignment_choice = questionary.select(
                     "Select an assignment:",
-                    choices=[{"name": reverse_hebrew_substrings(assignment["title"]), "value": assignment["id"]}
-                             for assignment in modified_assignments
-                             ]
+                    choices=[
+                        {"name": reverse_hebrew_substrings(assignment["title"]), "value": assignment["id"]}
+                        for assignment in modified_assignments
+                    ]
                 ).ask()
 
                 if not assignment_choice:
@@ -354,9 +390,10 @@ def interactive_mode(moodle):
 
                 attachment_choice = questionary.select(
                     "Select an attachment:",
-                    choices=[{"name": reverse_hebrew_substrings(attachment.filename), "value": attachment.url}
-                             for attachment in additional_info.attachments
-                             ]
+                    choices=[
+                        {"name": reverse_hebrew_substrings(attachment.filename), "value": attachment.url}
+                        for attachment in additional_info.attachments
+                    ]
                 ).ask()
 
                 if not attachment_choice:
@@ -366,8 +403,8 @@ def interactive_mode(moodle):
                 webbrowser.open(attachment_choice.replace("?forcedownload=1", ""))
 
             elif course_action == "View Recordings":
-                recordings = load_cache(CACHE_FILES["recordings"]) or load_recordings(moodle, course_choice)
-                save_cache(recordings, CACHE_FILES["recordings"])
+                cache_path = get_recordings_cache_path(course_choice)
+                recordings = load_cache(cache_path) or load_recordings(moodle, course_choice)
 
                 if len(recordings) == 0:
                     print("No recordings found.")

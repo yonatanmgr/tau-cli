@@ -4,3 +4,6 @@ dist/
 wheels/
 
 .venv
+*.egg-info
+.ropeproject
+.idea
